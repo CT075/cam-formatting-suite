@@ -1,3 +1,5 @@
+pub mod lz77;
+
 #[cfg(test)]
 mod tests {
     #[test]
