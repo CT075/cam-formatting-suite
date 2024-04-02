@@ -2,4 +2,4 @@
 
 [workspace]
 resolver = "2"
-members = ["lib", "bin/portrait_formatter", "bin/mar2dmp"]
+members = ["lib", "bin/portrait_formatter", "bin/mar2dmp", "bin/struct_munger"]
