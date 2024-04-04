@@ -39,58 +39,47 @@ pub fn handle_document<'a, 'b, 'any, S>(
             s
         }
         (None, Some(Item::Value(Value::String(path)))) => {
-            local_schema =
-                find_schema(source.clone(), path.value(), config.skip_unknowns)
-                    .map_err(|report| {
-                        vec![(if let Some(span) = path.span() {
-                            report.with_label(
-                                Label::new((source.clone(), span))
-                                    .with_message(format!(
-                                        "when trying to load schema `{}`",
-                                        path
-                                    )),
-                            )
-                        } else {
-                            report
-                        })
-                        .finish()]
-                    })?;
+            local_schema = find_schema(source.clone(), path.value(), config.skip_unknowns)
+                .map_err(|report| {
+                    vec![(if let Some(span) = path.span() {
+                        report.with_label(
+                            Label::new((source.clone(), span))
+                                .with_message(format!("when trying to load schema `{}`", path)),
+                        )
+                    } else {
+                        report
+                    })
+                    .finish()]
+                })?;
             &local_schema
         }
-        (None, Some(Item::Table(tbl))) => {
-            match Schema::parse(tbl, config.skip_unknowns) {
-                Ok(s) => {
-                    local_schema = s;
-                    &local_schema
-                }
-                Err((msg, span)) => {
-                    let mut report =
-                        Report::build(ReportKind::Error, source.clone(), 0)
-                            .with_message(msg);
-
-                    if let Some(span) = span {
-                        report = report
-                            .with_label(Label::new((source.clone(), span)));
-                    }
-
-                    let report = report;
-
-                    return Err(vec![report.finish()]);
-                }
+        (None, Some(Item::Table(tbl))) => match Schema::parse(tbl, config.skip_unknowns) {
+            Ok(s) => {
+                local_schema = s;
+                &local_schema
             }
-        }
+            Err((msg, span)) => {
+                let mut report =
+                    Report::build(ReportKind::Error, source.clone(), 0).with_message(msg);
+
+                if let Some(span) = span {
+                    report = report.with_label(Label::new((source.clone(), span)));
+                }
+
+                let report = report;
+
+                return Err(vec![report.finish()]);
+            }
+        },
         (None, Some(_)) => {
             let span = doc.key("schema").unwrap().span();
 
-            let mut report =
-                Report::build(ReportKind::Error, source.clone(), 0)
-                    .with_message("field `schema` should be a table or string");
+            let mut report = Report::build(ReportKind::Error, source.clone(), 0)
+                .with_message("field `schema` should be a table or string");
 
             if let Some(span) = span {
-                report = report.with_label(
-                    Label::new((source.clone(), span))
-                        .with_message("(defined here)"),
-                );
+                report = report
+                    .with_label(Label::new((source.clone(), span)).with_message("(defined here)"));
             }
 
             let report = report;
@@ -98,15 +87,9 @@ pub fn handle_document<'a, 'b, 'any, S>(
             return Err(vec![report.finish()]);
         }
         (None, None) => {
-            return Err(vec![Report::build(
-                ReportKind::Error,
-                source.clone(),
-                0,
-            )
-            .with_message(
-                "document does not specify a schema and none was provided",
-            )
-            .finish()])
+            return Err(vec![Report::build(ReportKind::Error, source.clone(), 0)
+                .with_message("document does not specify a schema and none was provided")
+                .finish()])
         }
     };
 
@@ -123,31 +106,25 @@ pub fn handle_document<'a, 'b, 'any, S>(
 
         match v {
             Item::Value(Value::InlineTable(ts)) => {
-                if let Err((msg, span)) =
-                    entry::visit(ts, schema.fields(), &mut sink)
-                {
+                if let Err((msg, span)) = entry::visit(ts, schema.fields(), &mut sink) {
                     errs.push(make_error_report(msg, span, source.clone()));
                 }
             }
             Item::Table(ts) => {
-                if let Err((msg, span)) =
-                    entry::visit(ts, schema.fields(), &mut sink)
-                {
+                if let Err((msg, span)) = entry::visit(ts, schema.fields(), &mut sink) {
                     errs.push(make_error_report(msg, span, source.clone()));
                 }
             }
             _ => errs.push({
                 let mut report =
-                    Report::build(ReportKind::Error, source.clone(), 0)
-                        .with_message(format!(
-                            "don't know what to do with top-level entry `{}` \
+                    Report::build(ReportKind::Error, source.clone(), 0).with_message(format!(
+                        "don't know what to do with top-level entry `{}` \
                                           that is not a table",
-                            k
-                        ));
+                        k
+                    ));
                 if let Some(span) = v.span() {
                     report = report.with_label(
-                        Label::new((source.clone(), span))
-                            .with_message("(defined here)"),
+                        Label::new((source.clone(), span)).with_message("(defined here)"),
                     );
                 }
                 report.finish()
@@ -172,23 +149,17 @@ pub fn load_schema<'a>(
     let text = fs::read_to_string(path).map_err({
         let path_string = path_string.clone();
 
-        |err| {
-            Report::build(ReportKind::Error, path_string, 0)
-                .with_message(format!("{}", err))
-        }
+        |err| Report::build(ReportKind::Error, path_string, 0).with_message(format!("{}", err))
     })?;
 
     let doc = ImDocument::parse(text).map_err({
         let path_string = path_string.clone();
         |err| {
-            let mut result =
-                Report::build(ReportKind::Error, path_string.clone(), 0)
-                    .with_message(err.message());
+            let mut result = Report::build(ReportKind::Error, path_string.clone(), 0)
+                .with_message(err.message());
 
             if let Some(span) = err.span() {
-                result = result.with_label(
-                    Label::new((path_string, span)).with_message("(here)"),
-                );
+                result = result.with_label(Label::new((path_string, span)).with_message("(here)"));
             }
 
             result
@@ -196,14 +167,11 @@ pub fn load_schema<'a>(
     })?;
 
     Schema::parse(doc.as_table(), skip_unknowns).map_err(|(msg, span)| {
-        let mut result =
-            Report::build(ReportKind::Error, path_string.clone(), 0)
-                .with_message(msg);
+        let mut result = Report::build(ReportKind::Error, path_string.clone(), 0).with_message(msg);
 
         if let Some(span) = span {
-            result = result.with_label(
-                Label::new((path_string, span)).with_message("(defined here)"),
-            );
+            result =
+                result.with_label(Label::new((path_string, span)).with_message("(defined here)"));
         }
 
         result
@@ -220,13 +188,8 @@ fn find_schema<'a>(
     load_schema(path, skip_unknowns)
 }
 
-fn make_error_report<'a>(
-    msg: String,
-    span: Option<Range<usize>>,
-    source: String,
-) -> Report<'a> {
-    let mut report =
-        Report::build(ReportKind::Error, source.clone(), 0).with_message(msg);
+fn make_error_report<'a>(msg: String, span: Option<Range<usize>>, source: String) -> Report<'a> {
+    let mut report = Report::build(ReportKind::Error, source.clone(), 0).with_message(msg);
 
     if let Some(span) = span {
         report = report.with_label(Label::new((source, span)));
@@ -236,7 +199,7 @@ fn make_error_report<'a>(
 }
 
 fn header() -> Vec<String> {
-    vec!["// generated by structmunger", "", "PUSH"]
+    vec!["// generated by structmunger", "", "PUSH", ""]
         .into_iter()
         .map(str::to_string)
         .collect()
@@ -269,6 +232,11 @@ impl StructWriter {
     }
 
     pub fn as_sink<'a>(&'a mut self, index: String) -> StructWriterSink<'a> {
+        self.print(format!(
+            "ORG ({})+(({})*({}))",
+            self.base, index, self.entry_size
+        ));
+
         StructWriterSink {
             owner: self,
             current_index: index,
@@ -294,10 +262,7 @@ impl Sink for StructWriterSink<'_> {
         if offset != self.current_offset {
             self.print(format!(
                 "ORG ({})+(({})*({}))+({})",
-                self.owner.base,
-                self.current_index,
-                self.owner.entry_size,
-                offset
+                self.owner.base, self.current_index, self.owner.entry_size, offset
             ))
         }
         self.print(format!("{} {}", kind, data.reify()));

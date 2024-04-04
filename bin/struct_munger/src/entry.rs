@@ -66,13 +66,13 @@ impl ValueOut for i64 {
 
 impl ValueOut for &str {
     fn reify(&self) -> String {
-        self.to_string()
+        format!("({})", self)
     }
 }
 
 impl ValueOut for &String {
     fn reify(&self) -> String {
-        self.to_string()
+        format!("({})", self)
     }
 }
 
@@ -91,18 +91,12 @@ pub fn visit(
                 // This `unwrap` cannot fail, because we already know `k` is in
                 // the table
                 let k = tbl.key(k).unwrap();
-                return Err((
-                    format!("no entry for key `{}` in schema", k),
-                    k.span(),
-                ));
+                return Err((format!("no entry for key `{}` in schema", k), k.span()));
             }
             Some(field) => match (v, &field.kind) {
                 (Item::Value(Value::Integer(i)), _) => {
-                    let atomkind = AtomKind::from_byte_size(
-                        field.size,
-                        make_atom_size_msg(k),
-                        i.span(),
-                    )?;
+                    let atomkind =
+                        AtomKind::from_byte_size(field.size, make_atom_size_msg(k), i.span())?;
                     if !atomkind.value_valid(*i.value()) {
                         return Err((
                             format!(
@@ -133,21 +127,13 @@ pub fn visit(
 
                     sink.write(
                         field.offset,
-                        AtomKind::from_byte_size(
-                            field.size,
-                            make_atom_size_msg(k),
-                            s.span(),
-                        )?,
+                        AtomKind::from_byte_size(field.size, make_atom_size_msg(k), s.span())?,
                         s.value(),
                     );
                 }
                 (Item::Value(Value::String(s)), _) => sink.write(
                     field.offset,
-                    AtomKind::from_byte_size(
-                        field.size,
-                        make_atom_size_msg(k),
-                        s.span(),
-                    )?,
+                    AtomKind::from_byte_size(field.size, make_atom_size_msg(k), s.span())?,
                     s.value(),
                 ),
                 (_, FieldKind::Single(_)) => {
@@ -160,13 +146,10 @@ pub fn visit(
                         v.span(),
                     ))
                 }
-                (
-                    Item::Value(Value::InlineTable(items)),
-                    FieldKind::List(subfields),
-                ) => visit(items, subfields, sink)?,
-                (Item::Table(items), FieldKind::List(subfields)) => {
+                (Item::Value(Value::InlineTable(items)), FieldKind::List(subfields)) => {
                     visit(items, subfields, sink)?
                 }
+                (Item::Table(items), FieldKind::List(subfields)) => visit(items, subfields, sink)?,
                 (_, FieldKind::List(_)) => {
                     return Err((
                         format!(
