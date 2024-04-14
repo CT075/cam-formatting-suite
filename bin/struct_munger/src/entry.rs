@@ -2,7 +2,7 @@ use std::{collections::HashMap, fmt, ops::Range};
 
 use toml_edit::{Item, TableLike, Value};
 
-use crate::schema::{Field, FieldKind};
+use crate::schema::{Field, FieldKind, SizeOrPointer};
 
 type SpannedErrorMsg = (String, Option<Range<usize>>);
 
@@ -11,6 +11,7 @@ pub enum AtomKind {
     Byte,
     Short,
     Word,
+    Poin,
 }
 
 impl AtomKind {
@@ -27,11 +28,23 @@ impl AtomKind {
         }
     }
 
+    pub fn from_size_or_pointer(
+        n: SizeOrPointer,
+        fail_msg: impl AsRef<str>,
+        src_loc: Option<Range<usize>>,
+    ) -> Result<Self, SpannedErrorMsg> {
+        match n {
+            SizeOrPointer::Size(n) => Self::from_byte_size(n, fail_msg, src_loc),
+            SizeOrPointer::Pointer => Ok(Self::Poin),
+        }
+    }
+
     pub fn to_usize(&self) -> usize {
         match *self {
             Self::Byte => 1,
             Self::Short => 2,
             Self::Word => 4,
+            Self::Poin => 4,
         }
     }
 
@@ -40,6 +53,7 @@ impl AtomKind {
             Self::Word => true,
             Self::Short => -32768 <= i && i <= 32767,
             Self::Byte => -128 <= i && i <= 255,
+            Self::Poin => true,
         }
     }
 }
@@ -50,6 +64,7 @@ impl fmt::Display for AtomKind {
             Self::Byte => write!(f, "BYTE"),
             Self::Short => write!(f, "SHORT"),
             Self::Word => write!(f, "WORD"),
+            Self::Poin => write!(f, "POIN"),
         }
     }
 }
@@ -95,8 +110,11 @@ pub fn visit(
             }
             Some(field) => match (v, &field.kind) {
                 (Item::Value(Value::Integer(i)), _) => {
-                    let atomkind =
-                        AtomKind::from_byte_size(field.size, make_atom_size_msg(k), i.span())?;
+                    let atomkind = AtomKind::from_size_or_pointer(
+                        field.size,
+                        make_atom_size_msg(k),
+                        i.span(),
+                    )?;
                     if !atomkind.value_valid(*i.value()) {
                         return Err((
                             format!(
@@ -114,7 +132,7 @@ pub fn visit(
                         if let Some(i) = variants.get(s.value()) {
                             sink.write(
                                 field.offset,
-                                AtomKind::from_byte_size(
+                                AtomKind::from_size_or_pointer(
                                     field.size,
                                     make_atom_size_msg(k),
                                     s.span(),
@@ -127,13 +145,17 @@ pub fn visit(
 
                     sink.write(
                         field.offset,
-                        AtomKind::from_byte_size(field.size, make_atom_size_msg(k), s.span())?,
+                        AtomKind::from_size_or_pointer(
+                            field.size,
+                            make_atom_size_msg(k),
+                            s.span(),
+                        )?,
                         s.value(),
                     );
                 }
                 (Item::Value(Value::String(s)), _) => sink.write(
                     field.offset,
-                    AtomKind::from_byte_size(field.size, make_atom_size_msg(k), s.span())?,
+                    AtomKind::from_size_or_pointer(field.size, make_atom_size_msg(k), s.span())?,
                     s.value(),
                 ),
                 (_, FieldKind::Single(_)) => {

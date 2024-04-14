@@ -4,6 +4,7 @@ use log;
 use toml_edit::{InlineTable, Item, Table, TableLike, Value};
 
 // CR cam: Validation
+// CR cam: Handle pointers better
 
 pub struct Schema {
     pub base_offset: usize,
@@ -13,13 +14,27 @@ pub struct Schema {
     fields: HashMap<String, Field>,
 }
 
+#[derive(Copy, Clone)]
+pub enum SizeOrPointer {
+    Pointer,
+    Size(usize),
+}
+
+impl std::fmt::Display for SizeOrPointer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self {
+            Self::Pointer => write!(f, "POIN"),
+            Self::Size(n) => write!(f, "{}", n),
+        }
+    }
+}
+
 pub struct Field {
     pub offset: usize,
-    pub size: usize,
+    pub size: SizeOrPointer,
     pub kind: FieldKind,
 }
 
-// CR cam: pointers
 pub enum FieldKind {
     Single(Option<HashMap<String, i64>>),
     Bitfield(HashMap<String, Field>),
@@ -219,8 +234,11 @@ impl Field {
                     extract_nonnegative_integer(v, msg, &mut offset)?
                 }
                 ("size", v) => {
-                    let msg = format!("`{}.size` must be a non-negative integer", path);
-                    extract_nonnegative_integer(v, msg, &mut size)?
+                    let msg = format!(
+                        "`{}.size` must be a non-negative integer or `pointer`",
+                        path
+                    );
+                    size = extract_size_or_pointer(v, msg);
                 }
                 ("variants", Item::Value(Value::InlineTable(kvs))) => {
                     variants = Some(Self::build_variants_from_table(
@@ -318,6 +336,22 @@ fn extract_nonnegative_integer(
         return Err((msg.as_ref().to_string(), item.span()));
     }
     Ok(())
+}
+
+fn extract_size_or_pointer(
+    item: &Item,
+    msg: impl AsRef<str>,
+) -> Result<SizeOrPointer, SpannedErrorMsg> {
+    match item {
+        Item::Value(Value::String(s)) if s.value().to_lowercase() == "pointer" => {
+            Ok(SizeOrPointer::Pointer)
+        }
+        it => {
+            let mut result = Err(("impossible".to_string(), None));
+            extract_nonnegative_integer(it, msg, &mut result)?;
+            result.map(SizeOrPointer::Size)
+        }
+    }
 }
 
 trait Spanned {
