@@ -1,9 +1,0 @@
-[package]
-name = "portrait_formatter"
-version = "0.1.0"
-edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-ea_suite_lib = {path = "../../lib"}
