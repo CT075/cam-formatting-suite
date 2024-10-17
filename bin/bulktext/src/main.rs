@@ -44,10 +44,10 @@ enum Mode {
     /// Process a single file
     #[clap(alias("parsefile"))]
     Single {
-        /// Output DMP
+        /// Output file
         #[arg(short, long)]
         output: Option<PathBuf>,
-        /// Write to stdout (at least one of --output and --to-stdout must be set)
+        /// Write to stdout (mutually exclusive with [output])
         #[arg(long, action=ArgAction::SetFalse)]
         to_stdout: bool,
         #[arg()]
