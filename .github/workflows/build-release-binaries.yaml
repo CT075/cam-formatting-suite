@@ -16,31 +16,31 @@ jobs:
             platform: linux
           - os: windows-latest
             platform: windows
-      steps:
-        - name: Checkout repo
-          uses: actions/checkout@v4
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-        - name: Setup rust toolchain
-          uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Setup rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
 
-        - name: Set up env for ${{ matrix.os }}
-          run: |
-            if [ "${{ matrix.platform }}" == "windows" ]; then
-              echo "Building on Windows"
-            elif [ "${{ matrix.platform }}" == "linux" ]; then
-              echo "Building on Linux"
-            fi
+      - name: Set up env for ${{ matrix.os }}
+        run: |
+          if [ "${{ matrix.platform }}" == "windows" ]; then
+            echo "Building on Windows"
+          elif [ "${{ matrix.platform }}" == "linux" ]; then
+            echo "Building on Linux"
+          fi
 
-        - name: Run build
-          run: |
-            if [ "${{ matrix.platform }}" == "windows" ]; then
-              cargo build --release --target x86_64-pc-windows-gnu
-            else
-              cargo build --release
-            fi
+      - name: Run build
+        run: |
+          if [ "${{ matrix.platform }}" == "windows" ]; then
+            cargo build --release --target x86_64-pc-windows-gnu
+          else
+            cargo build --release
+          fi
 
-        - name: Upload binary
-          uses: actions/upload-artifact@v4
-          with:
-            name: ${{ matrix.platform }}-release-artifacts
-            path: ./target/release
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}-release-artifacts
+          path: ./target/release
