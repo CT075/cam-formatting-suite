@@ -38,17 +38,17 @@ enum Mode {
 struct Args {
     #[command(subcommand)]
     mode: Mode,
-    /// Input file (if missing, read from stdin)
-    #[arg(short, long)]
+    /// Input file (if no input, read from stdin)
+    #[arg(global = true)]
     input: Option<PathBuf>,
     /// Output file
-    #[arg(short, long, group = "outkd")]
+    #[arg(short, long, global = true, group = "outkd")]
     output: Option<PathBuf>,
     /// Write to stdout (mutually exclusive with [output])
-    #[arg(long, action=ArgAction::SetTrue, group = "outkd")]
+    #[arg(long, global=true, action=ArgAction::SetTrue, group = "outkd")]
     to_stdout: bool,
     /// Print help information
-    #[arg(long, action=clap::ArgAction::HelpLong)]
+    #[arg(long, global=true, action=clap::ArgAction::HelpLong)]
     help: Option<bool>,
 }
 
