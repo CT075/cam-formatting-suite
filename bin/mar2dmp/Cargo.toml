@@ -1,0 +1,10 @@
+[package]
+name = "mar2dmp"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ea_suite_lib = {path = "../../lib"}
+anyhow = "1.0.81"
+itertools = "0.12.1"
+clap = { version = "4.5.2", features = ["derive"] }
