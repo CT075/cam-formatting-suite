@@ -67,6 +67,10 @@ impl Palette {
 
         Ok(())
     }
+
+    pub fn lookup(&self, idx: usize) -> Option<Color> {
+        self.0.get(idx).copied()
+    }
 }
 
 impl From<Vec<Color>> for Palette {
@@ -93,13 +97,47 @@ pub struct GBAImage {
     data: Vec<usize>,
 }
 
+pub struct GBAImageView<'a> {
+    owner: &'a GBAImage,
+    x: usize,
+    y: usize,
+    width: usize,
+    height: usize,
+}
+
 impl GBAImage {
     pub fn validate(&self) -> Result<(), Error> {
         self.palette.validate()?;
         Ok(())
     }
 
-    pub fn from_image_view<V>(
+    pub fn pixel_at(&self, x: usize, y: usize) -> Option<Color> {
+        if x >= self.width || y >= self.height {
+            return None;
+        }
+
+        self.data
+            .get(y * self.width + x)
+            .and_then(|idx| self.palette.lookup(*idx))
+    }
+
+    pub fn view(
+        &self,
+        x: usize,
+        y: usize,
+        width: usize,
+        height: usize,
+    ) -> GBAImageView {
+        GBAImageView {
+            owner: self,
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
+    pub fn from_generic_image<V>(
         img: &V,
         colors: Option<Palette>,
     ) -> Result<Self, Error>
@@ -163,7 +201,7 @@ impl GBAImage {
         V: GenericImageView,
         V::Pixel: Pixel<Subpixel = u8>,
     {
-        Self::from_image_view(img, None)
+        Self::from_generic_image(img, None)
     }
 
     pub fn with_known_palette<V>(
@@ -174,7 +212,19 @@ impl GBAImage {
         V: GenericImageView,
         V::Pixel: Pixel<Subpixel = u8>,
     {
-        Self::from_image_view(img, Some(palette))
+        Self::from_generic_image(img, Some(palette))
+    }
+}
+
+impl<'owner> GBAImageView<'owner> {
+    pub fn pixel_at(&self, x: usize, y: usize) -> Option<Color> {
+        if x >= self.width || y >= self.height {
+            return None;
+        }
+
+        let true_x = self.x + x;
+        let true_y = self.y + y;
+        self.owner.pixel_at(true_x, true_y)
     }
 }
 
@@ -266,5 +316,5 @@ pub fn convert_image(
         palette
     };
 
-    GBAImage::from_image_view(&img, palette)
+    GBAImage::from_generic_image(&img, palette)
 }
