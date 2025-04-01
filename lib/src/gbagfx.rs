@@ -18,10 +18,21 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum Error {
+    // Errors that can come from trying to insert/format a bad image
     #[error("image has too many colors")]
     TooManyColors,
     #[error("image contains a color not in the provided palette")]
     UnknownColor,
+    #[error("width and height must be multiples of 8")]
+    BadDimensions,
+
+    // Internal errors/bugs (raised by [validate])
+    #[error("BUG: image dimensions don't match internal buffer")]
+    DimensionMismatch,
+    #[error("BUG: invalid palette index")]
+    BadColorIndex,
+
+    // Errors from other libraries
     #[error("error processing image")]
     ImageError(#[from] image::ImageError),
     #[error("error processing png image")]
@@ -38,6 +49,30 @@ pub struct Color {
 impl Color {
     pub fn rgb(r: u8, g: u8, b: u8) -> Self {
         Self { r, g, b }
+    }
+
+    pub fn from_16bit(p: u16) -> Self {
+        const LOW5_MASK: u16 = 0b11111;
+        let r = (p & LOW5_MASK) as u8;
+        let g = ((p >> 5) & LOW5_MASK) as u8;
+        let b = ((p >> 10) & LOW5_MASK) as u8;
+        Self::rgb(r, g, b)
+    }
+
+    pub fn from_le_bytes((l, r): (u8, u8)) -> Self {
+        Self::from_16bit(((r as u16) << 8) | (l as u16))
+    }
+
+    pub fn to_16bit(self) -> u16 {
+        (((self.b >> 3) as u16) << 10)
+            | (((self.g >> 3) as u16) << 5)
+            | ((self.r >> 3) as u16)
+    }
+
+    pub fn to_le_bytes(self) -> [u8; 2] {
+        const LOW8_MASK: u16 = 0b11111111;
+        let short = self.to_16bit();
+        [(short & LOW8_MASK) as u8, ((short >> 8) & LOW8_MASK) as u8]
     }
 }
 
@@ -71,6 +106,13 @@ impl Palette {
     pub fn lookup(&self, idx: usize) -> Option<Color> {
         self.0.get(idx).copied()
     }
+
+    pub fn encode(&self) -> Vec<u8> {
+        self.0
+            .iter()
+            .flat_map(|col| Color::to_le_bytes(*col))
+            .collect()
+    }
 }
 
 impl From<Vec<Color>> for Palette {
@@ -88,10 +130,23 @@ impl FromIterator<Color> for Palette {
     }
 }
 
+impl FromIterator<u8> for Palette {
+    fn from_iter<I>(colors: I) -> Self
+    where
+        I: IntoIterator<Item = u8>,
+    {
+        colors
+            .into_iter()
+            .tuples::<(_, _)>()
+            .map(Color::from_le_bytes)
+            .collect()
+    }
+}
+
 pub struct GBAImage {
-    palette: Palette,
-    width: usize,
-    height: usize,
+    pub palette: Palette,
+    pub width: usize,
+    pub height: usize,
     // INVARIANT: forall i . data[i] < palette.len()
     // INVARIANT: data.len() = width * height, row-major.
     data: Vec<usize>,
@@ -108,17 +163,52 @@ pub struct GBAImageView<'a> {
 impl GBAImage {
     pub fn validate(&self) -> Result<(), Error> {
         self.palette.validate()?;
+
+        if self.data.len() != self.width * self.height {
+            return Err(Error::DimensionMismatch);
+        }
+
+        if self.width % 8 != 0 && self.height % 8 != 0 {
+            return Err(Error::BadDimensions);
+        }
+
+        if self.data.iter().any(|idx| *idx >= self.palette.len()) {
+            return Err(Error::BadColorIndex);
+        }
+
         Ok(())
     }
 
-    pub fn pixel_at(&self, x: usize, y: usize) -> Option<Color> {
+    pub fn pixel_at(&self, x: usize, y: usize) -> Option<usize> {
         if x >= self.width || y >= self.height {
             return None;
         }
 
-        self.data
-            .get(y * self.width + x)
-            .and_then(|idx| self.palette.lookup(*idx))
+        self.data.get(y * self.width + x).copied()
+    }
+
+    pub fn color_at(&self, x: usize, y: usize) -> Option<Color> {
+        self.pixel_at(x, y).and_then(|idx| self.palette.lookup(idx))
+    }
+
+    pub fn tiles<'a>(&'a self) -> impl Iterator<Item = GBAImageView<'a>> {
+        Tiles {
+            owner: self,
+            x: 0,
+            y: 0,
+        }
+    }
+
+    pub fn pixels<'a>(&'a self) -> impl Iterator<Item = usize> + 'a {
+        PixelIterator {
+            owner: self,
+            x_offs: 0,
+            y_offs: 0,
+            x: 0,
+            y: 0,
+            width: self.width,
+            height: self.height,
+        }
     }
 
     pub fn view(
@@ -217,7 +307,7 @@ impl GBAImage {
 }
 
 impl<'owner> GBAImageView<'owner> {
-    pub fn pixel_at(&self, x: usize, y: usize) -> Option<Color> {
+    pub fn pixel_at(&self, x: usize, y: usize) -> Option<usize> {
         if x >= self.width || y >= self.height {
             return None;
         }
@@ -226,6 +316,117 @@ impl<'owner> GBAImageView<'owner> {
         let true_y = self.y + y;
         self.owner.pixel_at(true_x, true_y)
     }
+
+    pub fn color_at(&self, x: usize, y: usize) -> Option<Color> {
+        self.pixel_at(x, y)
+            .and_then(|idx| self.owner.palette.lookup(idx))
+    }
+
+    pub fn pixels<'a>(&'a self) -> impl Iterator<Item = usize> + 'owner {
+        PixelIterator {
+            owner: self.owner,
+            x_offs: self.x,
+            y_offs: self.y,
+            x: 0,
+            y: 0,
+            width: self.width,
+            height: self.height,
+        }
+    }
+}
+
+struct Tiles<'a> {
+    owner: &'a GBAImage,
+    x: usize,
+    y: usize,
+}
+
+struct PixelIterator<'a> {
+    owner: &'a GBAImage,
+    x_offs: usize,
+    y_offs: usize,
+    x: usize,
+    y: usize,
+    width: usize,
+    height: usize,
+}
+
+impl<'owner> Iterator for Tiles<'owner> {
+    type Item = GBAImageView<'owner>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let true_x = self.x * 8;
+        let true_y = self.y * 8;
+
+        if true_y >= self.owner.height {
+            return None;
+        }
+
+        self.x += 1;
+
+        if self.x * 8 >= self.owner.width {
+            self.x = 0;
+            self.y += 1;
+        }
+
+        Some(self.owner.view(true_x, true_y, 8, 8))
+    }
+}
+
+impl<'owner> Iterator for PixelIterator<'owner> {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let true_x = self.x + self.x_offs;
+        let true_y = self.y + self.y_offs;
+
+        if self.y >= self.height {
+            return None;
+        }
+
+        self.x += 1;
+
+        if self.x >= self.width {
+            self.x = 0;
+            self.y += 1;
+        }
+
+        self.owner.pixel_at(true_x, true_y)
+    }
+}
+
+pub fn parse_palette_string(s: impl AsRef<str>) -> Option<Palette> {
+    let s = s.as_ref();
+    if s.len() != 64 {
+        return None;
+    }
+
+    // CR-someday cam: It wouldn't be too hard to do this check while parsing
+    // the colors but it _really_ doesn't matter.
+    if !s.chars().any(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+
+    s.chars()
+        .tuples::<(_, _, _, _)>()
+        .map(|(a, b, c, d)| {
+            u16::from_str_radix(format!("{}{}{}{}", c, d, a, b).as_str(), 16)
+                .map(Color::from_16bit)
+                .ok()
+        })
+        .collect::<Option<Vec<_>>>()
+        .map(Palette::from)
+}
+
+pub fn read_colors_from_image<V>(img: &V) -> Palette
+where
+    V: GenericImageView,
+    V::Pixel: Pixel<Subpixel = u8>,
+{
+    img.pixels()
+        .take(16)
+        .map(|(_x, _y, pxl)| Color::from(pxl))
+        .collect()
 }
 
 // TODO: more than 16 colors?
@@ -317,4 +518,15 @@ pub fn convert_image(
     };
 
     GBAImage::from_generic_image(&img, palette)
+}
+
+// TODO: do this as an iterator
+pub fn encode_tiles<'img>(
+    tiles: impl Iterator<Item = GBAImageView<'img>>,
+) -> Vec<u8> {
+    tiles
+        .flat_map(|tile| tile.pixels())
+        .tuples::<(_, _)>()
+        .map(|(a, b)| ((a & 0xF) | ((b & 0xF) << 4)) as u8)
+        .collect()
 }
