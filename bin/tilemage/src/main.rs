@@ -10,7 +10,8 @@ use clap::{
 };
 use image::{ImageFormat, ImageReader};
 
-use ea_suite_lib::{gbagfx, lz77};
+use gbalz77 as lz77;
+use tilemage as gbagfx;
 
 #[derive(Subcommand, Debug)]
 enum Mode {

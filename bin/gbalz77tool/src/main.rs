@@ -9,7 +9,7 @@ use atty;
 use clap::{ArgAction, ArgGroup, Parser, Subcommand};
 use thiserror::Error;
 
-use ea_suite_lib::lz77::{
+use gbalz77::{
     compress, decompress, BadBlockErrorHandler, CompressionStrategy,
     DecompressErrorHandler,
 };

@@ -1,0 +1,13 @@
+[package]
+name = "gbalz77"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+log = "0.4.17"
+itertools = "0.12.1"
+thiserror = "2.0.12"
+
+[dev-dependencies]
+quickcheck = "1"
+quickcheck_macros = "1"

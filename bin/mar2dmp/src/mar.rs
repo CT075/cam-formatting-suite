@@ -1,13 +1,15 @@
 use anyhow::{bail, Result};
 use itertools::Itertools;
 
-use ea_suite_lib::lz77::{compress, CompressionStrategy};
+use gbalz77::{compress, CompressionStrategy};
 
 pub fn process_mar(width: usize, height: usize, raw: &[u8]) -> Result<Vec<u8>> {
     let mut result: Vec<u8> = Vec::new();
 
     if width * height * 2 != raw.len() {
-        bail!("the provided size of the map does not match the size of the file");
+        bail!(
+            "the provided size of the map does not match the size of the file"
+        );
     }
 
     result.push(width as u8);

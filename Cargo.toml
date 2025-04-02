@@ -2,7 +2,8 @@
 
 [workspace]
 resolver = "2"
-members = [ "lib"
+members = [ "gbalz77"
+          , "tilemage"
           , "bin/mar2dmp"
           , "bin/bulktext"
           , "bin/gbalz77tool"

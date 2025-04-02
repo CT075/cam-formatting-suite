@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ea_suite_lib = {path = "../../lib"}
+gbalz77 = { path = "../../gbalz77" }
+tilemage = { path = "../../tilemage" }
 anyhow = "1.0.81"
 thiserror = "1.0.64"
 clap = { version = "4.5.2", features = ["derive"] }

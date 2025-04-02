@@ -1,5 +1,5 @@
 [package]
-name = "ea_suite_lib"
+name = "tilemage"
 version = "0.1.0"
 edition = "2021"
 
@@ -11,7 +11,3 @@ image = "0.25.6"
 png = "0.17.16"
 itertools = "0.12.1"
 thiserror = "2.0.12"
-
-[dev-dependencies]
-quickcheck = "1"
-quickcheck_macros = "1"
