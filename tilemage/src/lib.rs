@@ -29,7 +29,7 @@ pub enum Error {
     // Internal errors/bugs (raised by [validate])
     #[error("BUG: image dimensions don't match internal buffer")]
     DimensionMismatch,
-    #[error("BUG: invalid palette index")]
+    #[error("BUG: image contains color index >15")]
     BadColorIndex,
 
     // Errors from other libraries
@@ -39,7 +39,7 @@ pub enum Error {
     PngError(#[from] png::DecodingError),
 }
 
-#[derive(Copy, Clone, Hash, Eq, PartialEq)]
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Debug)]
 pub struct Color {
     pub r: u8,
     pub g: u8,
@@ -53,9 +53,9 @@ impl Color {
 
     pub fn from_16bit(p: u16) -> Self {
         const LOW5_MASK: u16 = 0b11111;
-        let r = (p & LOW5_MASK) as u8;
-        let g = ((p >> 5) & LOW5_MASK) as u8;
-        let b = ((p >> 10) & LOW5_MASK) as u8;
+        let r = ((p & LOW5_MASK) as u8) << 3;
+        let g = (((p >> 5) & LOW5_MASK) as u8) << 3;
+        let b = (((p >> 10) & LOW5_MASK) as u8) << 3;
         Self::rgb(r, g, b)
     }
 
@@ -76,6 +76,14 @@ impl Color {
     }
 }
 
+impl std::fmt::Display for Color {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        let [b1, b2] = self.to_le_bytes();
+        write!(f, "{:02X}{:02X}", b1, b2)?;
+        Ok(())
+    }
+}
+
 impl<P> From<P> for Color
 where
     P: Pixel<Subpixel = u8>,
@@ -86,21 +94,12 @@ where
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Palette(Vec<Color>);
 
 impl Palette {
     pub fn len(&self) -> usize {
         self.0.len()
-    }
-
-    // TODO: more than 16 colors? multiple palette banks?
-    pub fn validate(&self) -> Result<(), Error> {
-        if self.0.len() > 16 {
-            return Err(Error::TooManyColors);
-        }
-
-        Ok(())
     }
 
     pub fn lookup(&self, idx: usize) -> Option<Color> {
@@ -143,6 +142,15 @@ impl FromIterator<u8> for Palette {
     }
 }
 
+impl std::fmt::Display for Palette {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        for color in self.0.iter() {
+            write!(f, "{}", color)?;
+        }
+        Ok(())
+    }
+}
+
 pub struct GBAImage {
     pub palette: Palette,
     pub width: usize,
@@ -162,8 +170,6 @@ pub struct GBAImageView<'a> {
 
 impl GBAImage {
     pub fn validate(&self) -> Result<(), Error> {
-        self.palette.validate()?;
-
         if self.data.len() != self.width * self.height {
             return Err(Error::DimensionMismatch);
         }
@@ -172,7 +178,7 @@ impl GBAImage {
             return Err(Error::BadDimensions);
         }
 
-        if self.data.iter().any(|idx| *idx >= self.palette.len()) {
+        if let Some(_idx) = self.data.iter().find(|&&idx| idx > 0xF) {
             return Err(Error::BadColorIndex);
         }
 
@@ -236,12 +242,13 @@ impl GBAImage {
         V::Pixel: Pixel<Subpixel = u8>,
     {
         let (fixed_palette, mut colors) = match colors {
-            None => (true, HashMap::new()),
+            None => (false, HashMap::new()),
             Some(colors) => (
-                false,
+                true,
                 colors
                     .0
                     .iter()
+                    .take(16)
                     .enumerate()
                     .map(|(x, i)| (*i, x))
                     .collect::<HashMap<Color, usize>>(),

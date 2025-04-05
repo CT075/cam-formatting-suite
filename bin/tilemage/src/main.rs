@@ -297,8 +297,7 @@ impl ConvertOpts {
         };
 
         let image = gbagfx::convert_image(&input[..], format, palette)?;
-        // TODO
-        //image.validate()?;
+        image.validate()?;
         let image_was_output = matches!(&self.output, Some(_));
 
         if let Some(target) = self.output {
