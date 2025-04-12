@@ -9,4 +9,5 @@ members = [ "gbalz77"
           , "bin/gbalz77tool"
           , "bin/struct_munger"
           , "bin/tilemage"
+          , "bin/femaptool"
           ]

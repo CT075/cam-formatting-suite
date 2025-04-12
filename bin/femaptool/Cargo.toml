@@ -1,5 +1,5 @@
 [package]
-name = "gbalz77tool"
+name = "femaptool"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,5 +7,5 @@ edition = "2021"
 gbalz77 = { path = "../../gbalz77" }
 anyhow = "1.0.81"
 clap = { version = "4.5.2", features = ["derive"] }
-atty = "0.2"
-thiserror = "1.0.64"
+tiled = "0.14.0"
+itertools = "0.12.1"
